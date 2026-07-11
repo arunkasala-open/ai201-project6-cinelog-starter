@@ -1,0 +1,12 @@
+f74d5bb (HEAD -> feature/watchlist, origin/feature/watchlist) docs: add pr-response with review responses and design decisions
+1aad776 fix: restore WatchlistEntry model with UUID film_id after main rebase
+714ca86 fix: sort watchlist by date added instead of alphabetically
+77caf25 test: add test for nonexistent film_id in add_to_watchlist
+3d0acb6 fix: add deduplication check to prevent duplicate watchlist entries
+89ec46c refactor: rename save_to_watchlist to add_to_watchlist
+4c1b026 refactor: use db.session.get for film retrieval
+c80bc8d feat: add watchlist endpoint and service
+bbe206c (origin/main, origin/HEAD, main) Merge pull request #2 from ascherj/chore/add-gitignore
+718a9a8 chore: add .gitignore for generated files
+07ca580 refactor: migrate film IDs from integer to UUID
+014ae54 feat: initial CineLog API with film collection feature
