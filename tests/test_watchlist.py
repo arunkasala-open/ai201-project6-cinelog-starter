@@ -50,8 +50,8 @@ def test_add_to_watchlist_nonexistent_film_raises(app, sample_user):
     Equivalent of test_add_to_collection_nonexistent_film_raises.
     """
     with app.app_context():
-        # Film.id is an integer PK on this branch; this id was never inserted.
-        nonexistent_film_id = 999999
+        # Film.id is a UUID (post-refactor); this UUID was never inserted.
+        nonexistent_film_id = "00000000-0000-0000-0000-000000000000"
 
         with pytest.raises(FilmNotFoundError):
             add_to_watchlist(user_id=sample_user, film_id=nonexistent_film_id)
