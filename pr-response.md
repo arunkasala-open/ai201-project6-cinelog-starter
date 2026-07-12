@@ -197,17 +197,15 @@ I exercised the exact query my change controls — `filter_by(...).order_by(
 WatchlistEntry.date_added.desc())` — with two entries added five days apart, and
 confirmed the newer one comes back first. `pytest tests/ -v` still passes (5 tests).
 
-**Separate pre-existing bug I found (out of scope for these six comments):**
+**Separate pre-existing bug I found — now FIXED (see "Follow-up fixes" below):**
 While verifying, I discovered `get_watchlist()` raises `AttributeError:
 'WatchlistEntry' object has no attribute 'film'` for *any* non-empty watchlist — the
-committed HEAD version has the same defect, so my sort change didn't introduce it.
-Root cause: in `models.py`, `Film` declares a `backref="film"` only for
-`CollectionEntry`, so `CollectionEntry.film` exists but `WatchlistEntry.film` does not,
-and `get_watchlist()` calls `entry.film.to_dict()`. The one-line fix is to give
-`WatchlistEntry` a `film` relationship (e.g. add
-`watchlist_entries = db.relationship("WatchlistEntry", backref="film", lazy=True)` to
-`Film`). I've left it out of this PR because it isn't one of the six review comments,
-but it's flagged here so it isn't lost.
+committed HEAD version had the same defect, so my sort change didn't introduce it.
+Root cause: in `models.py`, `Film` declared a `backref="film"` only for
+`CollectionEntry`, so `CollectionEntry.film` existed but `WatchlistEntry.film` did not,
+and `get_watchlist()` calls `entry.film.to_dict()`. I originally flagged this as
+out-of-scope, but per reviewer feedback I shipped the one-line fix (adding the missing
+`watchlist_entries` relationship to `Film`). Details under **Follow-up fixes**.
 
 ## Comment 6 — Rebase
 
@@ -342,22 +340,41 @@ first, then exercise the watchlist:
    ```
    Expect HTTP `201` and a JSON body with `film_id` equal to `<FILM_ID>` and
    `public: true`.
-3. **Verify the service-level guards** (deduplication and unknown-film handling) via the
-   test suite, which covers them directly:
+3. **View the watchlist** → `200` with a JSON list (newest-added first):
    ```bash
-   pytest tests/ -v      # 5 passed, including the watchlist nonexistent-film test
+   curl -i http://localhost:5000/watchlist/<USER_ID>
+   ```
+4. **Check the error paths:**
+   - Re-run the POST from step 2 with the same `film_id` → **`409`** (already on the
+     watchlist).
+   - POST with a `film_id` that doesn't exist → **`404`** (film not found).
+5. **Run the test suite** (covers all of the above plus the service-level guards):
+   ```bash
+   pytest tests/ -v      # 11 passed
    ```
 
-### Known limitations / follow-ups (out of scope for the six review comments)
+### Follow-up fixes (shipped in this PR after reviewer feedback)
 
-- **`GET /watchlist/<user_id>` currently errors on a non-empty list.** `get_watchlist()`
-  calls `entry.film`, but `WatchlistEntry` has no `film` relationship (only
-  `CollectionEntry` gets `backref="film"` in `models.py`). One-line fix: add
+The reviewer noted that flagging a clearly-correct one-line fix without shipping it
+leaves a known-broken endpoint in the PR. Agreed — I fixed both defects I had
+originally flagged as out-of-scope:
+
+- **`GET /watchlist/<user_id>` no longer errors on a non-empty list.** Added the missing
   `watchlist_entries = db.relationship("WatchlistEntry", backref="film", lazy=True)` to
-  `Film`. Flagged, not fixed, because it isn't one of the six comments.
-- **The route layer doesn't map service exceptions to HTTP status codes.**
-  `FilmNotFoundError` / `AlreadyInWatchlistError` currently surface as `500`s rather than
-  `404` / `409`. The service layer raises the right exceptions (and is tested); wiring
-  them to proper responses is a natural follow-up.
+  `Film` in `models.py`, which is what `get_watchlist()`'s `entry.film.to_dict()` needs.
+  Verified: `GET /watchlist/<user_id>` now returns `200` with the film list, and a new
+  `test_get_watchlist_returns_films_newest_first` test covers it.
+- **The route now maps service exceptions to HTTP status codes.**
+  `POST /watchlist/<user_id>/add` returns `404` for `FilmNotFoundError` and `409` for
+  `AlreadyInWatchlistError` instead of surfacing `500`s. New route-level tests assert
+  the `201` / `404` / `409` responses.
+
+The test suite grew from 5 to **11 tests** (added happy-path add, duplicate, and
+`get_watchlist` service tests plus the three route status-code tests), following the
+happy-path / duplicate / nonexistent pattern `CONTRIBUTING.md` asks for.
+
+### Remaining follow-ups (still out of scope)
+
 - The **visibility default** (`public=False`) and the **`?sort=` param** described above
-  are proposed follow-ups, gated on auth landing for the former.
+  are proposed follow-ups; the visibility change is gated on authentication landing
+  first.
